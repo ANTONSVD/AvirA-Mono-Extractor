@@ -344,6 +344,24 @@ namespace
 		AvirA::C_Log::Ok("Output folder: " + ExtractDir);
 		return true;
 	}
+	bool OwnsConsoleWindow()
+	{
+		HWND window = GetConsoleWindow();
+		if (!window)
+			return false;
+		DWORD ids[8] = {};
+		DWORD count = GetConsoleProcessList(ids, 8);
+		return count <= 1;
+	}
+
+	void WaitForClose()
+	{
+		if (!OwnsConsoleWindow())
+			return;
+		std::printf("Press Enter to close...");
+		std::fflush(stdout);
+		std::fgetc(stdin);
+	}
 }
 
 int main(int argc, char** argv)
@@ -354,6 +372,7 @@ int main(int argc, char** argv)
 	if (!ParseArgs(argc, argv, Options))
 		return 1;
 
+	int Code = 1;
 	if (!Options.M_Given.empty())
 	{
 		S_GameTarget target;
@@ -361,9 +380,12 @@ int main(int argc, char** argv)
 		{
 			AvirA::C_Log::Fail("That path does not look like a Mono game: " + Options.M_Given);
 			AvirA::C_Log::Line("    Need Assembly-CSharp.dll, or \\*_Data\\Managed folder.");
+			WaitForClose();
 			return 1;
 		}
-		return RunGame(target, Options) ? 0 : 1;
+		Code = RunGame(target, Options) ? 0 : 1;
+		WaitForClose();
+		return Code;
 	}
 
 	std::vector<S_GameTarget> games = FindGames(Options.M_Roots);
@@ -380,6 +402,7 @@ int main(int argc, char** argv)
 	if (games.empty())
 	{
 		AvirA::C_Log::Fail("No Mono games found. Pass Assembly-CSharp.dll or a Managed folder as argument.");
+		WaitForClose();
 		return 1;
 	}
 
@@ -408,8 +431,12 @@ int main(int argc, char** argv)
 			}
 			if (answer[0] == '\n' || answer[0] == '\r')
 				break;
+			if (answer[0] == 0)
+				break;
 			AvirA::C_Log::Fail("Bad number, try again.");
 		}
 	}
-	return RunGame(games[pick], Options) ? 0 : 1;
+	Code = RunGame(games[pick], Options) ? 0 : 1;
+	WaitForClose();
+	return Code;
 }
