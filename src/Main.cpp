@@ -23,6 +23,7 @@ namespace
 		std::vector<std::string> M_Asm;
 		u32 M_PartKb = AVIRA_EXTRACTOR_PART_KB;
 		bool M_OutSet = false;
+		bool M_Fresh = false;
 	};
 
 	void Usage()
@@ -37,6 +38,7 @@ namespace
 		AvirA::C_Log::Line("  -a,  --asm <file>     extra Managed\\*.dll to decompile, repeatable");
 		AvirA::C_Log::Line("  -i,  --ilspy <path>   path to ilspycmd.exe");
 		AvirA::C_Log::Line("  -p,  --partsize <kb>  part file limit in KB, default " + std::to_string(AVIRA_EXTRACTOR_PART_KB));
+		AvirA::C_Log::Line("  -f,  --fresh          ignore cache, decompile everything again");
 	}
 
 	bool FilterOkay(const std::string& Name, const std::string& Filter)
@@ -66,6 +68,8 @@ namespace
 				Options.M_IlspyHint = argv[++i];
 			else if ((arg == "-p" || arg == "--partsize") && i + 1 < argc)
 				Options.M_PartKb = (u32)std::atol(argv[++i]);
+			else if (arg == "-f" || arg == "--fresh")
+				Options.M_Fresh = true;
 			else if (arg == "-h" || arg == "--help")
 			{
 				Usage();
@@ -140,6 +144,82 @@ namespace
 		}
 		return true;
 	}
+
+	std::string ProjectDirOf(const std::string& ExtractDir, const std::string& Dll)
+	{
+		std::string assemblyName = GetFileName(Dll);
+		return ExtractDir + "\\Ilspy\\" + assemblyName.substr(0, assemblyName.size() - 4);
+	}
+
+	bool StampLine(const std::string& Path, std::string& Line)
+	{
+		WIN32_FIND_DATAA found = {};
+		HANDLE handle = FindFirstFileA(Path.c_str(), &found);
+		if (handle == INVALID_HANDLE_VALUE)
+			return false;
+		FindClose(handle);
+		ULARGE_INTEGER size;
+		size.HighPart = found.nFileSizeHigh;
+		size.LowPart = found.nFileSizeLow;
+		ULARGE_INTEGER stamp;
+		stamp.HighPart = found.ftLastWriteTime.dwHighDateTime;
+		stamp.LowPart = found.ftLastWriteTime.dwLowDateTime;
+		Line = "Asm=" + GetFileName(Path) + "|"
+			+ std::to_string((unsigned long long)size.QuadPart) + "|"
+			+ std::to_string((unsigned long long)stamp.QuadPart);
+		return true;
+	}
+
+	std::vector<std::string> ReadManifest(const std::string& Path)
+	{
+		std::vector<std::string> out;
+		std::string bytes;
+		if (!ReadFile(Path, bytes))
+			return out;
+		std::string piece;
+		for (size_t i = 0; i <= bytes.size(); i++)
+		{
+			char c = i < bytes.size() ? bytes[i] : '\n';
+			if (c == '\n' || c == '\r')
+			{
+				if (!piece.empty())
+					out.push_back(piece);
+				piece.clear();
+				continue;
+			}
+			piece.push_back(c);
+		}
+		return out;
+	}
+
+	bool HasLine(const std::vector<std::string>& Lines, const std::string& Line)
+	{
+		for (size_t i = 0; i < Lines.size(); i++)
+		{
+			if (_stricmp(Lines[i].c_str(), Line.c_str()) == 0)
+				return true;
+		}
+		return false;
+	}
+
+	void WriteManifest(const std::string& Path, const std::string& Text)
+	{
+		FILE* file = nullptr;
+		if (fopen_s(&file, Path.c_str(), "wb") != 0 || !file)
+			return;
+		std::fwrite(Text.data(), 1, Text.size(), file);
+		std::fclose(file);
+	}
+
+	bool PartsExist(const std::string& ExtractDir, const std::string& Name)
+	{
+		WIN32_FIND_DATAA found = {};
+		HANDLE handle = FindFirstFileA((ExtractDir + "\\" + Name + "_Part_*.cs").c_str(), &found);
+		bool ok = handle != INVALID_HANDLE_VALUE;
+		if (ok)
+			FindClose(handle);
+		return ok;
+	}
 }
 
 namespace
@@ -164,19 +244,45 @@ namespace
 		std::string ExtractDir = OutRoot + "\\Extract_" + Name;
 		CreateDirs(ExtractDir);
 
-		std::string IlspyExe;
-		if (!PickIlspy(Options, IlspyExe))
-			return false;
-
 		std::vector<std::string> assemblies;
 		if (!BuildAssemblyList(Target, Options, assemblies))
 			return false;
 
+		std::string ManifestPath = ExtractDir + "\\Manifest.txt";
+		std::vector<std::string> knownLines;
+		if (!Options.M_Fresh)
+			knownLines = ReadManifest(ManifestPath);
+		std::string rootLine = "Root=" + Target.M_ManagedDir;
+		if (!HasLine(knownLines, rootLine))
+			knownLines.clear();
+		std::string partsLine = "Parts=" + std::to_string((unsigned long long)Options.M_PartKb);
+		bool partsKnown = HasLine(knownLines, partsLine);
+
 		std::vector<std::string> projectDirs;
+		std::vector<std::string> newManifestLines;
+		newManifestLines.push_back(rootLine);
+		newManifestLines.push_back(partsLine);
+		bool decompiledAny = false;
+		std::string IlspyExe;
 		for (size_t i = 0; i < assemblies.size(); i++)
 		{
+			std::string line;
+			if (!StampLine(assemblies[i], line))
+			{
+				AvirA::C_Log::Fail("Missing assembly: " + assemblies[i]);
+				return false;
+			}
+			std::string projectDir = ProjectDirOf(ExtractDir, assemblies[i]);
+			if (HasLine(knownLines, line) && DirExists(projectDir))
+			{
+				projectDirs.push_back(projectDir);
+				newManifestLines.push_back(line);
+				continue;
+			}
+			if (!decompiledAny && !PickIlspy(Options, IlspyExe))
+				return false;
+			decompiledAny = true;
 			std::string assemblyName = GetFileName(assemblies[i]);
-			std::string projectDir = ExtractDir + "\\Ilspy\\" + assemblyName.substr(0, assemblyName.size() - 4);
 			AvirA::C_Log::Info("Decompiling " + assemblyName + " ...");
 			if (!DecompileAssembly(IlspyExe, assemblies[i], projectDir))
 			{
@@ -185,6 +291,14 @@ namespace
 			}
 			AvirA::C_Log::Ok("Decompiled: " + projectDir);
 			projectDirs.push_back(projectDir);
+			newManifestLines.push_back(line);
+		}
+
+		if (!decompiledAny && partsKnown && PartsExist(ExtractDir, Name))
+		{
+			AvirA::C_Log::Ok("Nothing changed in " + Target.M_Name + ", closing.");
+			AvirA::C_Log::Ok("Output folder: " + ExtractDir);
+			return true;
 		}
 
 		std::vector<std::string> sources;
@@ -217,6 +331,12 @@ namespace
 			}
 		}
 		writer.Finish();
+
+		std::string manifestText;
+		for (size_t i = 0; i < newManifestLines.size(); i++)
+			manifestText += newManifestLines[i] + "\n";
+		WriteManifest(ManifestPath, manifestText);
+		AvirA::C_Log::Ok("Manifest updated.");
 
 		AvirA::C_Log::Ok("Parts: " + std::to_string(writer.GetParts()));
 		AvirA::C_Log::Ok("Sources glued: " + std::to_string(writer.GetSources()));

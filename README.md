@@ -20,7 +20,7 @@ out\Extract_<Название игры>\
 
 Нужен Visual Studio 2022 с C++ и .NET SDK (для ilspycmd).
 
-1. Собери `AviraMonoExtractor.sln`, выйдет `out\AviraMonoExtractor.exe`.
+1. Собери `AviraMonoExtractor.sln`, выйдет `out\AviraMonoExtractor.exe`, либо скачай с Релизов exe'шник и пользуйся.
 2. Запусти его. Экстрактор сам найдет Mono-игры среди Steam-библиотек.
    Игра одна: старт сразу. Игр несколько: выбери номер из списка.
 3. Если ilspycmd не установлен, экстрактор сам предложит его поставить
@@ -58,6 +58,16 @@ msbuild AviraMonoExtractor.vcxproj /p:Configuration=Release /p:Platform=x64
 ```bat
 out\AviraMonoExtractor.exe -a Assembly-CSharp-firstpass.dll -p 1024
 ```
+
+## Кеш
+
+Повторный запуск по той же игре не декомпилит заново.
+Кеш учитывает размер и дату каждой декомпиленной dll, хранится в
+`Extract_<Игра>\Manifest.txt`.
+
+- Ничего не поменялось: выход за секунду.
+- dll обновилась: декомпилируются только изменившиеся.
+- Нужен полный игнор кеша: `-f` / `--fresh`, или просто снеси `Manifest.txt`.
 
 ## Формат чанков
 
