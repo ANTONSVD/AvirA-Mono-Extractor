@@ -77,6 +77,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ResourceCompile Include="app.rc" />
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="src\Ilspy.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\PartWriter.cpp" />
@@ -89,6 +92,7 @@
     <ClInclude Include="src\PartWriter.hpp" />
     <ClInclude Include="src\Scanner.hpp" />
     <ClInclude Include="src\Util.hpp" />
+    <Image Include="app.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
