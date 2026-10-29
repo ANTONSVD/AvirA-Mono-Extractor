@@ -211,6 +211,21 @@ namespace
 		std::fclose(file);
 	}
 
+	void WipeParts(const std::string& ExtractDir, const std::string& Name)
+	{
+		WIN32_FIND_DATAA found = {};
+		HANDLE handle = FindFirstFileA((ExtractDir + "\\" + Name + "_Part_*.cs").c_str(), &found);
+		if (handle == INVALID_HANDLE_VALUE)
+			return;
+		do
+		{
+			if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+				continue;
+			DeleteFileA((ExtractDir + "\\" + found.cFileName).c_str());
+		} while (FindNextFileA(handle, &found));
+		FindClose(handle);
+	}
+
 	bool PartsExist(const std::string& ExtractDir, const std::string& Name)
 	{
 		WIN32_FIND_DATAA found = {};
@@ -312,6 +327,7 @@ namespace
 		}
 		AvirA::C_Log::Info("Source files: " + std::to_string(sources.size()));
 
+		WipeParts(ExtractDir, Name);
 		C_PartWriter writer;
 		if (!writer.Initialize(ExtractDir, Name, Options.M_PartKb))
 		{

@@ -5,7 +5,7 @@
 #include <vector>
 
 #define AVIRA_EXTRACTOR_NAME "AvirA-Mono-Extractor"
-#define AVIRA_EXTRACTOR_PART_KB 560u
+#define AVIRA_EXTRACTOR_PART_KB 128u
 
 namespace AvirA
 {
