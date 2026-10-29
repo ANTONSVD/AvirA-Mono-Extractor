@@ -150,9 +150,17 @@ namespace
 		std::string Name = CleanName(Target.M_Name);
 		AvirA::C_Log::Ok("Game: " + Target.M_Name + " | " + Target.M_ManagedDir);
 
-		std::string OutRoot = Options.M_OutSet ? Options.M_OutCustom : ExeDir() + "\\out";
-		if (!IsAbsolute(OutRoot))
-			OutRoot = ExeDir() + "\\" + OutRoot;
+		std::string OutRoot;
+		if (!Options.M_OutSet)
+			OutRoot = ExeDir();
+		else if (IsAbsolute(Options.M_OutCustom))
+			OutRoot = Options.M_OutCustom;
+		else
+		{
+			char cwd[MAX_PATH] = {};
+			GetCurrentDirectoryA(MAX_PATH, cwd);
+			OutRoot = std::string(cwd) + "\\" + Options.M_OutCustom;
+		}
 		std::string ExtractDir = OutRoot + "\\Extract_" + Name;
 		CreateDirs(ExtractDir);
 

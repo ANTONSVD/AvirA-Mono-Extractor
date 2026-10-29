@@ -36,6 +36,38 @@ namespace AvirA
 			CloseHandle(info.hProcess);
 			return code == 0;
 		}
+
+		bool RunQuiet(const std::string& CommandLine)
+		{
+			std::vector<char> buffer(CommandLine.begin(), CommandLine.end());
+			buffer.push_back(0);
+			SECURITY_ATTRIBUTES inherit = {};
+			inherit.nLength = sizeof(inherit);
+			inherit.bInheritHandle = TRUE;
+			HANDLE nul = CreateFileA("NUL", GENERIC_WRITE, FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, 0, nullptr);
+			PROCESS_INFORMATION info = {};
+			STARTUPINFOA setup = {};
+			setup.cb = sizeof(setup);
+			setup.dwFlags = STARTF_USESTDHANDLES;
+			setup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+			setup.hStdOutput = nul;
+			setup.hStdError = nul;
+			BOOL made = CreateProcessA(nullptr, buffer.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &setup, &info);
+			DWORD code = 1;
+			if (made)
+			{
+				WaitForSingleObject(info.hProcess, INFINITE);
+				if (GetExitCodeProcess(info.hProcess, &code))
+					made = code == 0;
+				else
+					made = FALSE;
+				CloseHandle(info.hThread);
+				CloseHandle(info.hProcess);
+			}
+			if (nul && nul != INVALID_HANDLE_VALUE)
+				CloseHandle(nul);
+			return made != FALSE;
+		}
 	}
 
 	bool CheckIlspy(const std::string& Hint, std::string& Resolved)
@@ -78,9 +110,24 @@ namespace AvirA
 		std::string dotnet;
 		if (!DotnetOnPath(dotnet))
 			return false;
-		if (!RunInherit("\"" + dotnet + "\" tool install -g ilspycmd -v minimal"))
-			return false;
-		return CheckIlspy(std::string(), Resolved);
+		static const char* const Ladder[] =
+		{
+			nullptr,
+			"10.1.1.8388",
+			"9.1.0.7988",
+			"9.0.0.7889",
+			"8.2.0.7535"
+		};
+		for (int i = 0; i < 5; i++)
+		{
+			std::string command = "\"" + dotnet + "\" tool install -g ilspycmd -v minimal";
+			if (Ladder[i])
+				command += " --version " + std::string(Ladder[i]);
+			if (RunQuiet(command) && CheckIlspy(std::string(), Resolved))
+				return true;
+			RunQuiet("\"" + dotnet + "\" tool uninstall -g ilspycmd -v minimal");
+		}
+		return false;
 	}
 
 	bool DecompileAssembly(const std::string& IlspyExe, const std::string& Dll, const std::string& OutDir)
