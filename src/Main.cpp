@@ -358,9 +358,7 @@ namespace
 	{
 		if (!OwnsConsoleWindow())
 			return;
-		std::printf("Press Enter to close...");
-		std::fflush(stdout);
-		std::fgetc(stdin);
+		Sleep(2000);
 	}
 }
 
