@@ -228,7 +228,7 @@ namespace
 
 int main(int argc, char** argv)
 {
-	std::printf("%s v%s\n", AVIRA_EXTRACTOR_NAME, AVIRA_EXTRACTOR_VERSION);
+	std::printf("%s\n", AVIRA_EXTRACTOR_NAME);
 
 	S_Options Options;
 	if (!ParseArgs(argc, argv, Options))
